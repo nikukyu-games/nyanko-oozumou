@@ -2633,7 +2633,7 @@ async function openContact(d={}){
     const k=await modal(`<h3>送れなかったにゃ…</h3>電波のよいところで、もう一度ためしてね。<div class="ctN">（${escH(e.message||e)}）</div>`,[{t:'もう一度',c:'gold'},{t:'やめる',c:'gray'}]);
     if(k===0)openContact(v);}
 }
-async function openSettings(){const i=await modal(`<h3>設定</h3>部屋の名前<br><input class="inp" id="nmIn" maxlength="10" value="${S.name}"><br><br>効果音：<b>${S.sound?'オン':'オフ'}</b>　音楽：<b>${S.bgm?'オン':'オフ'}</b><br><span style="font-size:3.2cqw">クラウド保存：${cloudOK?'<b style="color:#1d6a37">オン</b>':'オフ（この画面では使えません）'}</span>`,
+async function openSettings(){const i=await modal(`<h3>設定</h3>部屋の名前<br><input class="inp" id="nmIn" maxlength="10" value="${S.name}"><br><br>効果音：<b>${S.sound?'オン':'オフ'}</b>　音楽：<b>${S.bgm?'オン':'オフ'}</b><br><span style="font-size:3.2cqw">クラウド保存：${cloudOK?'<b style="color:#1d6a37">オン</b>':'オフ（この画面では使えません）'}</span>${S.tcode?`<div style="margin-top:2cqw;background:#fff3cf;border:.5cqw dashed #c99a2e;border-radius:2cqw;padding:1.6cqw"><span style="font-size:3cqw">🔑 引き継ぎコード</span><br><b style="font-size:6.4cqw;letter-spacing:.15em;color:#5a1a00;user-select:all">${tcFmt(S.tcode)}</b><br><span style="font-size:2.8cqw;color:#7a4a2a">データが消えたときに使うよ。スクショしておいてね</span></div>`:''}`,
   [{t:'保存',c:'gold'},{t:S.sound?'効果音をオフ':'効果音をオン'},{t:S.bgm?'音楽をオフ':'音楽をオン'},{t:'受け取り履歴',c:'blue'},{t:'📣 友だちにすすめる',c:'red'},{t:'🐾 不具合・お問い合わせ',c:'blue'},{t:'データを消す',c:'red'},{t:'📖 あそびかた',c:'blue'},{t:'💾 データの引き継ぎ',c:'gold'},{t:'とじる',c:'gray'}]);
   const v=document.getElementById('nmIn')?document.getElementById('nmIn').value:S.name;
   if(i===0){S.name=(v||'にゃんこ部屋').slice(0,10);save();refreshHome();toast('保存したにゃ');}
@@ -2647,6 +2647,32 @@ async function openSettings(){const i=await modal(`<h3>設定</h3>部屋の名�
   if(i===6){const j=await modal('<h3>本当に消す？</h3>集めた猫も育てた記録もぜんぶ消えます。',[{t:'消す',c:'red'},{t:'やめる',c:'gray'}]);if(j===0){localStorage.removeItem(KEY);location.reload();}}}
 
 
+
+// ================= 引き継ぎコード =================
+const TC_A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function tcGen(){const r=new Uint32Array(8);crypto.getRandomValues(r);return [...r].map(x=>TC_A[x%TC_A.length]).join('');}
+function tcFmt(c){return c?c.slice(0,4)+'-'+c.slice(4):'';}
+function tcNorm(v){return String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/O/g,'0').replace(/I/g,'1');}
+async function tcEnsure(){if(!cloudOK)return;try{const db=await fb();
+  if(!S.tcode){S.tcode=tcGen();save();}
+  if(S.tcUid!==fbUid){await db.ref('codes/'+S.tcode).set({uid:fbUid,at:Date.now()});S.tcUid=fbUid;save();}}catch(e){}}
+async function tcRestore(){const k=await modal(`<h3>🔑 コードで引き継ぐ</h3>前に控えておいた<b>引き継ぎコード</b>（8文字）を入れてね。<input class="inp" id="tcIn" maxlength="12" placeholder="例：AB12-CD34" style="display:block;width:100%;box-sizing:border-box;margin-top:2cqw;text-align:center;font-size:6cqw;letter-spacing:.2em;text-transform:uppercase" autocapitalize="characters" autocomplete="off">`,[{t:'さがす',c:'gold'},{t:'やめる',c:'gray'}]);
+  const c=tcNorm((document.getElementById('tcIn')||{}).value);if(k!==0)return;
+  if(c.length!==8)return modal('<h3>8文字で入れてね</h3>「-」はなくても大丈夫にゃ。',[{t:'OK',c:'gray'}]);
+  if(c===S.tcode)return modal('<h3>それは今のコードにゃ</h3>今このスマホで遊んでいるデータのコードだよ。',[{t:'OK',c:'gray'}]);
+  toast('さがしているにゃ…');let d=null;
+  try{const db=await fb();const m=(await db.ref('codes/'+c).once('value')).val();
+    if(!m||!m.uid){$('toast').classList.remove('on');return modal('<h3>見つからなかったにゃ</h3>コードをもう一度たしかめてね。',[{t:'OK',c:'gray'}]);}
+    const v=(await db.ref('saves/'+m.uid).once('value')).val();if(!v||!v.data){$('toast').classList.remove('on');return modal('<h3>データがまだないにゃ</h3>',[{t:'OK',c:'gray'}]);}
+    d=JSON.parse(v.data);}
+  catch(e){$('toast').classList.remove('on');return modal(`<h3>読みこめなかったにゃ</h3>電波のよいところでもう一度ためしてね。<div class="small">（${fbErr(e)}）</div>`,[{t:'OK',c:'gray'}]);}
+  $('toast').classList.remove('on');
+  const n=Object.keys(d.cats||{}).length,t=d.updatedAt?new Date(d.updatedAt).toLocaleString('ja-JP'):'?';
+  const j=await modal(`<h3>このデータを読みこむ？</h3>猫 <b>${n}</b>匹・部屋Lv <b>${d.plv||1}</b><br>コイン ${d.coin}・宝石 ${d.gem}<br><span class="small" style="color:#7a4a2a">（${t} のデータ）</span><br><br>今このスマホのデータは、このデータに置きかわります。`,[{t:'読みこむ',c:'red'},{t:'やめる',c:'gray'}]);
+  if(j!==0)return;
+  try{const cur=localStorage.getItem(KEY);if(cur)localStorage.setItem(KEY+'_bak',cur);}catch(e){}
+  S=Object.assign(newSave(),d);S.tcode=c;S.tcUid=null;S.updatedAt=Date.now();save();await tcEnsure();
+  toast('引き継ぎ完了にゃ！');setTimeout(()=>location.reload(),1200);}
 // ================= データの引き継ぎ（リンク） =================
 const TD_KEY='#restore=';
 async function tdEncode(o){const b=new Blob([JSON.stringify(o)]).stream().pipeThrough(new CompressionStream('gzip'));
@@ -2656,10 +2682,21 @@ async function tdDecode(t){t=t.replace(/-/g,'+').replace(/_/g,'/');while(t.lengt
   const b=new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'));return JSON.parse(await new Response(b).text());}
 function tdBase(){return location.href.split('#')[0];}
 async function openTransfer(){let url='';try{url=tdBase()+TD_KEY+await tdEncode(S);}catch(e){return modal('<h3>作れなかったにゃ</h3>このブラウザでは引き継ぎリンクが作れないみたい。',[{t:'OK',c:'gray'}]);}
-  const k=await modal(`<h3>💾 データの引き継ぎ</h3>今のデータが入った<b>引き継ぎリンク</b>を作ったよ。<br>メモやLINEの自分あてに保存しておいてね。<br><br>データが消えたときや、別のスマホに移すときは、<br>このリンクをSafariで開くと元にもどせるにゃ。<div class="small" style="margin-top:2cqw;color:#7a4a2a">（リンクを作ったときのデータにもどるので、ときどき作り直してね）</div>`,
-    [{t:'📋 リンクをコピー',c:'gold'},{t:'📤 メモ・LINEに送る',c:'blue'},{t:'とじる',c:'gray'}]);
+  const k=await modal(`<h3>💾 データの引き継ぎ</h3>${S.tcode?`<div style="background:#fff3cf;border:.5cqw dashed #c99a2e;border-radius:2cqw;padding:1.6cqw;margin-bottom:2cqw"><span style="font-size:3cqw">🔑 あなたの引き継ぎコード</span><br><b style="font-size:6.4cqw;letter-spacing:.15em;color:#5a1a00;user-select:all">${tcFmt(S.tcode)}</b><br><span style="font-size:2.8cqw;color:#7a4a2a">スクショしておけば、別のスマホでもこのコードで戻せるにゃ</span></div>`:''}<b>引き継ぎリンク</b>も作れるよ：今のデータが入ったリンク。<br>メモやLINEの自分あてに保存しておいてね。<br><br>データが消えたときや、別のスマホに移すときは、<br>このリンクをSafariで開くと元にもどせるにゃ。<div class="small" style="margin-top:2cqw;color:#7a4a2a">（リンクを作ったときのデータにもどるので、ときどき作り直してね）</div>`,
+    [{t:'📋 リンクをコピー',c:'gold'},{t:'📤 メモ・LINEに送る',c:'blue'},{t:'📥 リンクから読みこむ',c:'red'},{t:'🔑 コードで引き継ぐ',c:'red'},{t:'とじる',c:'gray'}]);
   if(k===0){try{await navigator.clipboard.writeText(url);toast('コピーしたにゃ！メモに貼っておいてね');}catch(e){prompt('このリンクをコピーしてね',url);}}
-  if(k===1){try{await navigator.share({title:'にゃんこ大相撲 引き継ぎリンク',text:'にゃんこ大相撲の引き継ぎリンク（'+new Date().toLocaleString('ja-JP')+'）',url});}catch(e){}}}
+  if(k===1){try{await navigator.share({title:'にゃんこ大相撲 引き継ぎリンク',text:'にゃんこ大相撲の引き継ぎリンク（'+new Date().toLocaleString('ja-JP')+'）',url});}catch(e){}}
+  if(k===2){tdPaste();}
+  if(k===3){tcRestore();}}
+async function tdPaste(){const k=await modal(`<h3>📥 リンクから読みこむ</h3>保存しておいた<b>引き継ぎリンク</b>を、まるごと貼りつけてね。<br><span class="small" style="color:#7a4a2a">（ホーム画面のアプリで遊んでいる人はこちらから）</span><textarea class="inp" id="tdIn" style="display:block;width:100%;box-sizing:border-box;margin-top:2cqw;height:30cqw;font-size:3cqw;word-break:break-all" placeholder="https://…#restore=…"></textarea>`,[{t:'読みこむ',c:'gold'},{t:'やめる',c:'gray'}]);
+  const v=(document.getElementById('tdIn')||{}).value||'';if(k!==0)return;
+  const i=v.indexOf(TD_KEY);const tok=(i>=0?v.slice(i+TD_KEY.length):v).replace(/\s/g,'');if(!tok)return toast('リンクが空っぽにゃ');
+  let d=null;try{d=await tdDecode(tok);}catch(e){return modal('<h3>読めなかったにゃ</h3>リンクが途中で切れているかも。最後までコピーしてね。',[{t:'OK',c:'gray'}]);}
+  const n=Object.keys(d.cats||{}).length,t=d.updatedAt?new Date(d.updatedAt).toLocaleString('ja-JP'):'?';
+  const j=await modal(`<h3>このデータを読みこむ？</h3>猫 <b>${n}</b>匹・部屋Lv <b>${d.plv||1}</b><br>コイン ${d.coin}・宝石 ${d.gem}<br><span class="small" style="color:#7a4a2a">（${t} のデータ）</span><br><br>今のデータは、このデータに置きかわります。`,[{t:'読みこむ',c:'red'},{t:'やめる',c:'gray'}]);
+  if(j!==0)return;
+  try{const cur=localStorage.getItem(KEY);if(cur)localStorage.setItem(KEY+'_bak',cur);}catch(e){}
+  S=Object.assign(newSave(),d);S.updatedAt=Date.now();save();toast('引き継ぎデータを読みこんだにゃ！');setTimeout(()=>location.reload(),1200);}
 async function tdCheck(){const h=location.hash;if(!h.startsWith(TD_KEY))return;
   let d=null;try{d=await tdDecode(h.slice(TD_KEY.length));}catch(e){alert('引き継ぎリンクが読めなかったにゃ（途中で切れているかも）');history.replaceState(null,'',tdBase());return;}
   const n=Object.keys(d.cats||{}).length,t=d.updatedAt?new Date(d.updatedAt).toLocaleString('ja-JP'):'?';
@@ -2693,7 +2730,7 @@ function cloudSave(){if(!cloudOK)return;clearTimeout(cloudT);cloudT=setTimeout(a
 async function cloudStart(){try{const db=await fb();const snap=await db.ref('saves/'+fbUid).once('value');const v=snap.val();
   if(v&&v.data&&(v.updatedAt||0)>(S.updatedAt||0)){const c=JSON.parse(v.data);S=Object.assign(newSave(),c);try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
     if(cur==='home')refreshHome();}
-  cloudOK=true;cloudSave();}catch(e){cloudOK=false;}}
+  cloudOK=true;cloudSave();tcEnsure();}catch(e){cloudOK=false;}}
 function teamData(){return S.team.map(id=>{const c=S.cats[id];return{id,lv:c.lv,star:c.star,nat:c.nat,rank:c.rank,t:c.t,waza:c.waza,kesho:c.kesho==null?-1:c.kesho};});}
 function renderFriend(){const B=$('fBody');
   B.innerHTML=`<div class="sum" style="text-align:center">友だちと同じ合言葉を入れて<br>1人が「部屋を作る」、もう1人が「部屋に入る」<br><span style="color:#7ad0ff">⚡ 手合せは体力を使わないよ</span><br><span style="color:#ffd96a">🎁 ほうびの宝石は1日3回まで（今日あと${S.fDay===today()?3-(S.fCnt||0):3}回）</span></div>
